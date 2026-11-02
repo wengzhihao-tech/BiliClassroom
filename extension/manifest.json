@@ -1,0 +1,10 @@
+{
+  "manifest_version":3,"name":"BiliClassroom 网课理解 · 开发预览","version":"0.1.0",
+  "description":"经点击启动采集B站课程播放状态、可见字幕、标签页画面和音频，发送到本机服务。",
+  "minimum_chrome_version":"116",
+  "permissions":["activeTab","tabCapture","offscreen","storage"],
+  "host_permissions":["http://127.0.0.1:18743/*"],
+  "background":{"service_worker":"worker.js","type":"module"},
+  "action":{"default_popup":"popup.html","default_title":"BiliClassroom 网课助手"},
+  "content_scripts":[{"matches":["https://www.bilibili.com/video/*"],"js":["content.js"],"run_at":"document_idle"}]
+}

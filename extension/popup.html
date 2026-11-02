@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>BiliClassroom 网课助手</title>
+<style>body{font:14px system-ui;width:340px;margin:0;padding:20px;background:#f7f8fa;color:#223047}h1{font-size:19px;margin:0 0 8px}p{line-height:1.6;color:#556176}input[type=password],textarea{box-sizing:border-box;width:100%;border:1px solid #cbd2dd;border-radius:7px;padding:9px;background:white}label{display:block;margin:12px 0}button{padding:9px 13px;border:0;border-radius:7px;background:#254b78;color:white;margin:6px 5px 6px 0;cursor:pointer}#stop{background:#a74737}pre{white-space:pre-wrap;word-break:break-word;font:12px system-ui;line-height:1.6;max-height:260px;overflow:auto}small{color:#69758a}</style>
+<h1>BiliClassroom 网课助手</h1><p>点击开始后采集当前 B站课程，所有数据发往本机。开发预览版。</p>
+<label>本机配对码<input id="token" type="password" autocomplete="off" placeholder="从 runtime/pairing.json 复制 token"></label><button id="save">保存配对</button>
+<label><input id="audio" type="checkbox" checked> 标签页音频（不采集麦克风）</label>
+<label><input id="frames" type="checkbox" checked> 视频可见区域画面（播放器内浮层可能保留）</label>
+<label><input id="danmaku" type="checkbox"> 可见 DOM 弹幕（部分渲染方式不支持）</label>
+<label>OCR语言（下次开始时生效）<select id="ocrLanguage"><option value="zh-Hans-CN">中文/混合</option><option value="en-US">英文/代码</option></select></label>
+<button id="start">开始当前课程</button><button id="stop">停止采集</button><button id="refresh">刷新状态</button>
+<pre id="evidence" aria-live="polite">尚未采集。</pre><details><summary>详细状态</summary><pre id="status">尚未启动。</pre></details><label>根据当前证据提问<textarea id="question" rows="2" placeholder="老师刚才讲了什么？"></textarea></label><button id="ask">询问本地模型</button>
+<small>ASR暂定文字和OCR未核验文字仅供核对。引擎状态以刷新结果为准；未配置模型时不生成答案。</small>
+<script type="module" src="popup.js"></script></html>
