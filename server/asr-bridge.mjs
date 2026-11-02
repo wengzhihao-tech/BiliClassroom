@@ -3,7 +3,7 @@ import {randomUUID} from 'node:crypto';
 // Only a caller-supplied local backend is supported. No environment-triggered downloads/cloud calls.
 export class AsrBridge{
   constructor(backend,appendDerived,{timeoutMs=10000}={}){
-    this.current=null;this.timeline=null;this.metrics={accepted:0,suppressed:0,deliveryErrors:0};
+    this.current=null;this.timeline=null;this.metrics={accepted:0,suppressed:0,deliveryErrors:0,staleAudio:0};
     if(typeof backend==='function'){
       this.planner=new AudioWindows();
       this.queue=new TranscriptionQueue(backend,async raw=>{
@@ -34,6 +34,8 @@ export class AsrBridge{
         this.timeline={epoch:e.epoch,rate:e.rate,paused:e.paused};continue;
       }
       if(e.kind!=='audio'||this.timeline?.paused)continue;
+      // Playback observations in the same epoch are authoritative.
+      if(this.timeline&&e.epoch===this.timeline.epoch&&e.playbackRate!==this.timeline.rate){this.metrics.staleAudio++;continue;}
       // A fresh epoch/rate observation invalidates old jobs before another 4-second window forms.
       if(this.timeline&&(e.epoch!==this.timeline.epoch||e.playbackRate!==this.timeline.rate)){
         this.reset();this.timeline={epoch:e.epoch,rate:e.playbackRate,paused:false};

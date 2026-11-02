@@ -88,3 +88,15 @@ test('new epoch frame-only gap still immediately cancels prior audio task',async
   assert.equal((await ctx()).availability.asrProvisional,0);
  },{asrBackend:async(_w,o)=>{signal=o.signal;return held.promise;}});
 });
+
+test('late previous-rate audio cannot cancel current-rate task or rewind playback',async()=>{
+ const held=defer();let calls=0,signal;
+ await fixture(async({req,id,ctx,until})=>{
+  await req('/sessions/'+id+'/events',{events:[{id:'clock2',kind:'playback',epoch:0,videoTime:100,captureTime:2,rate:2,paused:false}]});
+  await req('/sessions/'+id+'/events',{events:[0,1,2,3].map(i=>audio('old'+i,i))});assert.equal(calls,0);
+  await req('/sessions/'+id+'/events',{events:[0,1,2,3].map(i=>({...audio('fresh'+i,100+i*2),playbackRate:2}))});
+  await req('/sessions/'+id+'/events',{events:[0,1,2,3].map(i=>audio('late'+i,i))});
+  assert.equal(calls,1);assert.equal(signal.aborted,false);held.resolve('new rate survives');
+  const c=await until(c=>c.provisionalEvidence.length===1);assert.equal(c.asrRuntime.delivery.staleAudio,8);assert.deepEqual(c.provisionalEvidence[0].sourceEventIds,['fresh0','fresh1','fresh2','fresh3']);assert.equal(c.evidence.length,0);
+ },{asrBackend:async(_w,o)=>{calls++;signal=o.signal;return held.promise;}});
+});
