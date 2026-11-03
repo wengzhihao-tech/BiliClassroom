@@ -2,7 +2,7 @@ const clip=(s,n=1000)=>String(s??'').slice(0,n);
 const time=t=>Number.isFinite(t)?t.toFixed(1)+'秒':'时间未知';
 const refs=ids=>Array.isArray(ids)?ids.slice(0,3).map(x=>clip(x,100)).join(', '):'未知';
 const overlapSummary=view=>{
- if(view?.method!=='exact_text_original_sample_iou_0.5'||!Array.isArray(view.groups))return null;
+ if(!['exact_text_original_sample_iou_0.5','exact_text_all_observations_sample_iou_0.5'].includes(view?.method)||!Array.isArray(view.groups))return null;
  const groups=view.groups.slice(0,512).filter(g=>g&&typeof g.word==='string'&&Array.isArray(g.observations)&&g.observations.length);
  if(!groups.length)return null;
  const byId=new Map(groups.map(g=>[g.id,g])),shown=groups.slice(-24);
