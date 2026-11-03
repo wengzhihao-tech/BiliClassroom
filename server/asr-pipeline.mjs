@@ -36,7 +36,8 @@ export class AudioWindows {
   }
 }
 export class TranscriptionQueue {
-  constructor(backend,onResult,{timeoutMs=10000}={}){if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>60000)throw new Error('invalid timeout');this.timeoutMs=timeoutMs;this.faulted=false;if(typeof backend!=='function'||typeof onResult!=='function')throw new Error('explicit local backend and sink required');this.backend=backend;this.onResult=onResult;this.generation=0;this.pending=null;this.active=null;this.key=null;this.closed=false;this.metrics={replaced:0,cancelled:0,discarded:0,errors:0,timeouts:0};}
+  constructor(backend,onResult,{timeoutMs=10000}={}){if(!Number.isInteger(timeoutMs)||timeoutMs<1||timeoutMs>60000)throw new Error('invalid timeout');this.timeoutMs=timeoutMs;this.faulted=false;this.faultReason=null;this.consecutiveFailures=0;if(typeof backend!=='function'||typeof onResult!=='function')throw new Error('explicit local backend and sink required');this.backend=backend;this.onResult=onResult;this.generation=0;this.pending=null;this.active=null;this.key=null;this.closed=false;this.metrics={replaced:0,cancelled:0,discarded:0,errors:0,timeouts:0,empty:0};}
+  fail(){this.metrics.errors++;this.consecutiveFailures++;if(this.consecutiveFailures>=3){this.faulted=true;this.faultReason='errors';this.pending=null;}}
   invalidate(){this.generation++;this.pending=null;if(this.active){this.active.controller.abort();this.metrics.cancelled++;}this.key=null;}
   close(){this.closed=true;this.invalidate();}
   submit(window){
@@ -49,15 +50,16 @@ export class TranscriptionQueue {
   kick(){
     if(this.active||!this.pending||this.closed||this.faulted)return;
     const job=this.pending;this.pending=null;const controller=new AbortController();this.active={controller};
-    const timer=setTimeout(()=>{this.faulted=true;this.metrics.timeouts++;this.invalidate();},this.timeoutMs);timer.unref?.();
+    const timer=setTimeout(()=>{this.faulted=true;this.faultReason='timeout';this.metrics.timeouts++;this.invalidate();},this.timeoutMs);timer.unref?.();
     this.active.promise=(async()=>{
       try{
         const result=await this.backend(job.window,{signal:controller.signal});
         if(this.closed||controller.signal.aborted||job.generation!==this.generation){this.metrics.discarded++;return;}
         const normalized=normalizeAsrResult(result,job.window),text=normalized.text;
-        if(typeof text!=='string'||!text.trim()||text.length>12000){this.metrics.errors++;return;}
-        await this.onResult({...normalized,kind:'asr',stability:'provisional',text,epoch:job.window.epoch,videoTime:job.window.videoTime,sourceEventIds:job.window.sourceEventIds,sessionId:job.window.sessionId});
-      }catch{if(!controller.signal.aborted)this.metrics.errors++;}
+        if(typeof text!=='string'||text.length>12000)throw Error('invalid ASR text');
+        if(!text.trim()){this.consecutiveFailures=0;this.metrics.empty++;return;}
+        await this.onResult({...normalized,kind:'asr',stability:'provisional',text,epoch:job.window.epoch,videoTime:job.window.videoTime,sourceEventIds:job.window.sourceEventIds,sessionId:job.window.sessionId});this.consecutiveFailures=0;
+      }catch{if(!controller.signal.aborted)this.fail();}
     })().finally(()=>{clearTimeout(timer);this.active=null;this.kick();});
   }
   async idle(){while(this.active){await this.active.promise;}}

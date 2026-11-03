@@ -58,3 +58,19 @@ test('provisional ASR is counted separately and excluded from teacher evidence',
  commitEvents(s,prepareEvents(s,[{id:'asr2',kind:'asr',epoch:0,videoTime:0,captureTime:1,text:'externally committed',sourceEventIds:['audio1'],stability:'stable'}]),0);
  c=contextFor(s);assert.equal(c.availability.asr,1);assert.deepEqual(c.evidence.map(e=>e.id),['asr2']);
 });
+
+test('three consecutive processing errors open sticky circuit and discard pending work',async()=>{
+ const w=feed(new AudioWindows())[0];let calls=0;const q=new TranscriptionQueue(async()=>{calls++;throw Error('synthetic engine failure');},()=>{});
+ for(let i=0;i<3;i++){q.submit(w);if(i===2)q.submit(w);await q.idle();}
+ assert.equal(calls,3);assert.equal(q.faulted,true);assert.equal(q.faultReason,'errors');assert.equal(q.pending,null);assert.equal(q.metrics.errors,3);
+ q.invalidate();assert.equal(q.consecutiveFailures,3);assert.throws(()=>q.submit(w));
+});
+test('valid empty recognition and successful delivery reset consecutive errors',async()=>{
+ const w=feed(new AudioWindows())[0];let calls=0,out=[];const q=new TranscriptionQueue(async()=>{calls++;if([1,3,5].includes(calls))throw Error('synthetic');return calls===2?'   ':'text';},e=>out.push(e));
+ for(let i=0;i<5;i++){q.submit(w);await q.idle();}
+ assert.equal(q.faulted,false);assert.equal(q.consecutiveFailures,1);assert.equal(q.metrics.errors,3);assert.equal(q.metrics.empty,1);assert.equal(out.length,1);
+});
+test('explicit cancellation is excluded from consecutive engine error circuit',async()=>{
+ const w=feed(new AudioWindows())[0];let reject;const q=new TranscriptionQueue(()=>new Promise((_r,j)=>reject=j),()=>{});
+ q.submit(w);q.invalidate();reject(Error('cancelled process'));await q.idle();assert.equal(q.metrics.errors,0);assert.equal(q.consecutiveFailures,0);assert.equal(q.faulted,false);
+});

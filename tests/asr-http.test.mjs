@@ -100,3 +100,13 @@ test('late previous-rate audio cannot cancel current-rate task or rewind playbac
   const c=await until(c=>c.provisionalEvidence.length===1);assert.equal(c.asrRuntime.delivery.staleAudio,8);assert.deepEqual(c.provisionalEvidence[0].sourceEventIds,['fresh0','fresh1','fresh2','fresh3']);assert.equal(c.evidence.length,0);
  },{asrBackend:async(_w,o)=>{calls++;signal=o.signal;return held.promise;}});
 });
+
+test('HTTP exposes sticky backend error circuit after three failures without new attempts',async()=>{
+ let calls=0;
+ await fixture(async({feed,req,id,until})=>{
+  await feed();await until(c=>c.asrRuntime.queue.errors===1);
+  for(let step=1;step<=2;step++){await req('/sessions/'+id+'/events',{events:[0,1].map(i=>audio('e'+step+'_'+i,2+step*2+i))});await until(c=>c.asrRuntime.queue.errors===step+1);}
+  const c=await until(c=>c.asrRuntime.status==='blocked_backend_errors');assert.equal(c.asrRuntime.failures.consecutive,3);assert.equal(c.asrRuntime.pending,false);
+  await feed(0,8,'later');await delay(10);assert.equal(calls,3);assert.equal(c.evidence.length,0);
+ },{asrBackend:async()=>{calls++;throw Error('synthetic backend failure');}});
+});
