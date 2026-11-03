@@ -10,7 +10,7 @@ export class AsrBridge{
         const s=this.current;
         if(!s||s.closed||s.id!==raw.sessionId||s.lastEpoch!==raw.epoch){this.metrics.suppressed++;return;}
         try{appendDerived(s,{...raw,id:randomUUID(),captureTime:Date.now()});this.metrics.accepted++;}
-        catch{this.metrics.deliveryErrors++;}
+        catch{this.metrics.deliveryErrors++;throw Error('ASR result persistence failed');}
       },{timeoutMs});
     }
   }
