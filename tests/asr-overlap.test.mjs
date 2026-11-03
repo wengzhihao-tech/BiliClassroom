@@ -34,3 +34,11 @@ test('context adds dedup view without changing raw provisional or teacher eviden
  const s={id:'s',source:{},lastEpoch:0,closed:true,events:[event('a'),event('b',undefined,{windowStart:2,videoTime:2})]};
  const c=contextFor(s,{at:4});assert.equal(c.provisionalEvidence.length,2);assert.equal(c.provisionalTranscript.groups.length,1);assert.equal(c.evidence.length,0);
 });
+
+test('overlap chains do not collapse separate repeated words and preserve observations',()=>{
+ const es=[event('old',[word('控制',0,9000)]),event('middle',[word('控制',3000,12000)]),event('new',[word('控制',6000,15000)])];
+ const before=JSON.stringify(es),r=provisionalTranscript(es);
+ assert.equal(r.groups.length,2);assert.equal(r.duplicates,1);
+ assert.equal(r.groups.reduce((n,g)=>n+g.observations.length,0),3);
+ assert.equal(JSON.stringify(es),before);assert(r.groups.every(g=>g.stability==='provisional'));
+});

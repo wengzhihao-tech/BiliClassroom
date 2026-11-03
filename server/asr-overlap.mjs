@@ -20,7 +20,7 @@ export function provisionalTranscript(events){
    const w=e.words[i],candidates=new Set();
    for(const p of w.sourceSpans)for(const g of index.get(key+'|'+p.id)||[])candidates.add(g);
    const matches=[...candidates].filter(g=>!g.observations.some(o=>o.eventId===e.id)&&g.observations.some(o=>overlap(o.sourceSpans,w.sourceSpans)>=0.5));
-   const same=matches.find(g=>g.word===w.word);
+   const same=matches.find(g=>g.word===w.word&&g.observations.every(o=>overlap(o.sourceSpans,w.sourceSpans)>=0.5));
    const observation={eventId:e.id,wordIndex:i,windowStart:e.windowStart,videoStart:w.videoStart,videoEnd:w.videoEnd,confidence:w.confidence,sourceSpans:w.sourceSpans.map(p=>({...p}))};
    let g=same;
    if(g){g.observations.push(observation);duplicates++;}
@@ -37,6 +37,6 @@ export function provisionalTranscript(events){
   }
  }
  groups.sort((a,b)=>a.videoStart-b.videoStart||a.videoEnd-b.videoEnd||a.id.localeCompare(b.id));
- return {stability:'provisional',method:'exact_text_original_sample_iou_0.5',groups,duplicates,conflictGroups:groups.filter(g=>g.conflicts.length).length,truncated,
+ return {stability:'provisional',method:'exact_text_all_observations_sample_iou_0.5',groups,duplicates,conflictGroups:groups.filter(g=>g.conflicts.length).length,truncated,
  limitations:['Repeated hypotheses are not verified speech or stable commits.','Different words sharing PCM remain visible as conflicts.','At most eight hypotheses and 512 word groups; raw events remain unchanged.']};
 }
