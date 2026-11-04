@@ -47,7 +47,10 @@ export function createApp({dataDir=path.join(root,'runtime'),token,maxBytes=256*
       const url=new URL(req.url,'http://127.0.0.1');
       if(url.pathname==='/sessions'&&req.method==='POST'){
         if([...sessions.values()].some(s=>!s.closed))return reply(res,409,{error:'stop current session first'});
-        const s=newSession(await body(req));
+        const input=await body(req);
+        // Recheck after the asynchronous body read to serialize session admission.
+        if([...sessions.values()].some(s=>!s.closed))return reply(res,409,{error:'stop current session first'});
+        const s=newSession(input);
         const dir=path.join(dataDir,'sessions',s.id);mkdirSync(dir,{recursive:true});
         writeFileSync(path.join(dir,'session.json'),JSON.stringify({id:s.id,source:s.source,ocrLanguage:s.ocrLanguage,createdAt:s.createdAt},null,2));sessions.set(s.id,s);
         return reply(res,201,{id:s.id});

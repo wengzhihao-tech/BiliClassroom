@@ -1,0 +1,6 @@
+import test from 'node:test';import assert from 'node:assert/strict';import http from 'node:http';import {mkdtempSync,rmSync} from 'node:fs';import os from 'node:os';import path from 'node:path';import {createApp} from '../server/index.mjs';
+test('two concurrent session creations admit at most one',async()=>{
+ const dir=mkdtempSync(path.join(os.tmpdir(),'bili-race-')),app=createApp({dataDir:dir,token:'synthetic'});await new Promise(r=>app.listen(0,'127.0.0.1',r));
+ const requests=[];function begin(){let done;const promise=new Promise(r=>done=r);const req=http.request({hostname:'127.0.0.1',port:app.address().port,path:'/sessions',method:'POST',headers:{Authorization:'Bearer synthetic','Content-Type':'application/json','Transfer-Encoding':'chunked'}},res=>{res.resume();res.on('end',()=>done(res.statusCode));});req.write('{');requests.push(req);return promise;}
+ try{const a=begin(),b=begin();await new Promise(r=>setTimeout(r,80));for(const req of requests)req.end('"url":"https://www.bilibili.com/video/BV1Synthetic"}');const statuses=(await Promise.all([a,b])).sort();assert.deepEqual(statuses,[201,409]);}finally{await new Promise(r=>app.close(r));rmSync(dir,{recursive:true,force:true});}
+});
