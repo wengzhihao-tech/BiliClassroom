@@ -41,7 +41,8 @@ export class AsrBridge{
         this.reset();this.timeline={epoch:e.epoch,rate:e.playbackRate,paused:false};
       }
       const result=this.planner.push(s.id,e);
-      if(result.reason&&result.reason!=='duplicate'&&result.reason!=='stale_epoch')this.queue.invalidate();
+      if(result.reason==='stale_audio_time')this.metrics.staleAudio++;
+      if(result.reason&&result.reason!=='duplicate'&&result.reason!=='stale_epoch'&&result.reason!=='stale_audio_time')this.queue.invalidate();
       for(const window of result.windows)this.queue.submit(window);
     }
   }

@@ -10,6 +10,8 @@ export class AudioWindows {
     if(this.last?.sessionId===sessionId&&e.epoch<this.last.epoch){this.metrics.stale++;return{windows:[],reason:'stale_epoch'};}
     const key=JSON.stringify([sessionId,e.epoch,e.playbackRate]),previous=this.last;
     if(this.key===key&&this.seen.has(e.id)){this.metrics.duplicates++;return{windows:[],reason:'duplicate'};}
+    // Same-epoch chunks arriving out of order must not rewind an active window. Seek must advance epoch.
+    if(this.key===key&&previous&&e.videoTime<previous.videoTime-0.25){this.metrics.stale++;return{windows:[],reason:'stale_audio_time'};}
     const end=previous?previous.videoTime+previous.duration*previous.playbackRate:null;
     const discontinuity=this.key!==null&&(this.key!==key||Math.abs(e.videoTime-end)>0.25);
     let reason=null;
