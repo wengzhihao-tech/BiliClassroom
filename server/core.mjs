@@ -76,7 +76,10 @@ export function validateEvent(raw) {
   }
   if (e.kind === 'audio') {
     if(raw.sampleRate!==16000 || raw.channels!==1 || typeof raw.data!=='string' || !/^[A-Za-z0-9+/=]+$/.test(raw.data)) throw new InputError('invalid PCM audio');
-    const n=Buffer.from(raw.data,'base64').length;
+    if(raw.data.length>Math.ceil(128000/3)*4)throw new InputError('PCM encoding too large');
+    const decoded=Buffer.from(raw.data,'base64'),canonical=decoded.toString('base64');
+    if(raw.data!==canonical&&raw.data!==canonical.replace(/=+$/,''))throw new InputError('invalid PCM base64');
+    const n=decoded.length;
     if(n<2 || n>16000*2*4 || n%2 || !finite(raw.duration,0.001,4) || Math.abs(n/32000-raw.duration)>0.02) throw new InputError('audio length mismatch');
     const playbackRate=raw.playbackRate??1;
     if(!finite(playbackRate,0.1,16))throw new InputError('invalid audio playback rate');
