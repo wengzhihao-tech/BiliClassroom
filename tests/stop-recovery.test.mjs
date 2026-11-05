@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,rmSync,existsSync} from 'node:fs';import os from 'node:os';import path from 'node:path';import {createApp} from '../server/index.mjs';
+test('stopping an interrupted archive never rewrites its recovery history',async()=>{
+ const dir=mkdtempSync(path.join(os.tmpdir(),'bili-stopped-'));let app;
+ async function start(){app=createApp({dataDir:dir,token:'synthetic'});await new Promise(r=>app.listen(0,'127.0.0.1',r));return 'http://127.0.0.1:'+app.address().port}
+ async function request(base,route,body){const r=await fetch(base+route,{method:body?'POST':'GET',headers:{Authorization:'Bearer synthetic',...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});return r.json()}
+ try{let base=await start();const {id}=await request(base,'/sessions',{url:'https://www.bilibili.com/video/BV1Synthetic'});await new Promise(r=>app.close(r));base=await start();let c=await request(base,'/sessions/'+id+'/context');assert.equal(c.recovery.status,'interrupted_by_restart');await request(base,'/sessions/'+id+'/stop',{});assert.equal(existsSync(path.join(dir,'sessions',id,'stopped.json')),false);await new Promise(r=>app.close(r));base=await start();c=await request(base,'/sessions/'+id+'/context');assert.equal(c.recovery.status,'interrupted_by_restart');}finally{if(app?.listening)await new Promise(r=>app.close(r));rmSync(dir,{recursive:true,force:true});}
+});
