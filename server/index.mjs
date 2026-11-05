@@ -71,7 +71,7 @@ export function createApp({dataDir=path.join(root,'runtime'),token,maxBytes=256*
         try{ocr.consume(s,accepted);}catch{ocr.metrics.deliveryErrors++;}
         return reply(res,200,{accepted:accepted.length,duplicates:events.length-accepted.length});
       }
-      if(m[2]==='stop'&&req.method==='POST'){if(s.closed)return reply(res,200,{ok:true});asr.stop(s);ocr.stop(s);s.closed=true;writeFileSync(path.join(dataDir,'sessions',s.id,'stopped.json'),JSON.stringify({at:new Date().toISOString()}));return reply(res,200,{ok:true});}
+      if(m[2]==='stop'&&req.method==='POST'){if(s.closed)return reply(res,200,{ok:true});writeFileSync(path.join(dataDir,'sessions',s.id,'stopped.json'),JSON.stringify({at:new Date().toISOString()}));asr.stop(s);ocr.stop(s);s.closed=true;return reply(res,200,{ok:true});}
       if(m[2]==='context'&&req.method==='GET'){
         const opts={};for(const k of ['epoch','at','window'])if(url.searchParams.has(k))opts[k]=Number(url.searchParams.get(k));
         await hydrateSession(s,dataDir,{maxBytes});
