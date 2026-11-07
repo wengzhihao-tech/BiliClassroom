@@ -33,7 +33,7 @@
   function attach(v){
     if(attached.has(v))return;attached.add(v);
     for(const name of ['seeking','ratechange','pause','play','waiting','ended'])v.addEventListener(name,()=>{
-      if(!active)return;
+      if(!active||v!==video()||source()!==initial)return;
       if(name==='seeking'){epoch++;lastCaption='';enqueue('gap',{text:'用户跳转；新时间轴分段，旧上下文不可合并。'});}
       enqueue('playback',{paused:v.paused,rate:v.playbackRate,reason:name});
       timeline(v);

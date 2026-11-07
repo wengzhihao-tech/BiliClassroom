@@ -9,6 +9,7 @@ function make(kind,extra={}){
   return {id:crypto.randomUUID(),kind,epoch:mapping.epoch,videoTime:t,captureTime:Date.now(),...extra};
 }
 function add(e){if(!e||stoppingCapture)return false;if(queue.length>=8){dropped++;return false;}queue.push(e);void pump();return true;}
+function flushDrops(){if(!dropped||queue.length>=8||stoppingCapture)return;const n=dropped,e=make('gap',{text:`音画发送拥塞，丢弃${n}条；存在缺口。`});if(!e)return;dropped=0;if(!add(e))dropped+=n;}
 let pumpPromise=null;
 function pump(){
   if(pumpPromise)return pumpPromise;
@@ -21,7 +22,7 @@ async function pumpOnce(){
     const r=await fetch(`${endpoint}/sessions/${current.id}/events`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${current.token}`},body:JSON.stringify({events:batch}),signal:AbortSignal.timeout(4000)});
     if(r.status===413){await chrome.storage.session.set({lastError:'音画采集达到本地配额，已自动停止。'});void chrome.runtime.sendMessage({type:'CAPTURE_ENDED'}).catch(()=>{});return;}
     if(!r.ok)throw new Error('ingest rejected');
-    if(session===current&&queue===target){target.splice(0,batch.length);if(dropped){const n=dropped;dropped=0;add(make('gap',{text:`音画发送拥塞，丢弃${n}条；存在缺口。`}));}}
+    if(session===current&&queue===target){target.splice(0,batch.length);flushDrops();}
   }catch{}
 }
 function base64(bytes){let s='';for(let i=0;i<bytes.length;i+=8192)s+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(s);}
@@ -114,7 +115,7 @@ chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
     const previous=mapping,next=msg.data;
     const boundary=!previous||previous.epoch!==next.epoch||previous.rate!==next.rate||previous.paused!==next.paused||Date.now()-previous.wallTime>2500;
     if(previous&&previous.epoch!==next.epoch){queue=[];frameBaseline=null;frameKey='';}
-    mapping=next;if(boundary){blockedUntil=Date.now();resetPcm();}
+    mapping=next;if(boundary){blockedUntil=Date.now();resetPcm();}flushDrops();
     respond({ok:true});return;
   }
   const p=msg.type==='CAPTURE_START'?start(msg):stop({drain:msg.drain!==false});p.then(report=>respond({ok:true,...report})).catch(e=>respond({ok:false,error:e.message}));return true;
