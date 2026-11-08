@@ -5,9 +5,9 @@
   function source(){const u=new URL(location.href);return u.origin+u.pathname+'?p='+(u.searchParams.get('p')||'1');}
   function video(){return document.querySelector('video');}
   function enqueue(kind,values={}){
-    const v=video();if(!active||!v)return;
-    if(queue.length>=60){dropped++;return;}
-    queue.push({id:crypto.randomUUID(),kind,epoch,videoTime:v.currentTime||0,captureTime:Date.now(),...values});
+    const v=video();if(!active||!v)return false;
+    if(queue.length>=60){dropped++;return false;}
+    queue.push({id:crypto.randomUUID(),kind,epoch,videoTime:v.currentTime||0,captureTime:Date.now(),...values});return true;
   }
   let inFlight=null;
   function flush(){
@@ -61,7 +61,7 @@
     const native=[...v.textTracks].flatMap(t=>[...(t.activeCues||[])].map(c=>c.text||''));
     const dom=[...document.querySelectorAll('.bpx-player-subtitle-panel-text,.bilibili-player-video-subtitle-item-text')].filter(el=>el.getClientRects().length).map(el=>el.textContent||'');
     const caption=(native.length?native:dom).join('\n').trim().slice(0,12000);
-    if(caption&&caption!==lastCaption){lastCaption=caption;enqueue('subtitle',{text:caption});}
+    if(caption&&caption!==lastCaption&&enqueue('subtitle',{text:caption}))lastCaption=caption;
     if(!caption)lastCaption='';
     if(allowDanmaku){
       const now=Date.now();for(const [k,t]of seenDanmaku)if(now-t>15000)seenDanmaku.delete(k);
