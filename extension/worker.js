@@ -15,15 +15,18 @@ async function stop(options={}){
   try{return await stopping;}finally{stopping=null;}
 }
 async function stopOnce({drain=true}={}){
-  const s=await load();let lastStop=null;
+  const active=await load(),pending=(await chrome.storage.session.get('pendingStop')).pendingStop,s=active||pending;let lastStop=null;
   if(s){
-    const [content,media]=await Promise.all([
+    const previous=(await chrome.storage.session.get('lastStop')).lastStop;
+    const [content,media]=active?await Promise.all([
       bounded(chrome.tabs.sendMessage(s.tabId,{type:'COLLECT_STOP',drain})).catch(()=>({drained:false,reason:'tab_unavailable'})),
       s.audio||s.frames?bounded(chrome.runtime.sendMessage({target:'offscreen',type:'CAPTURE_STOP',drain})).catch(()=>({drained:false,reason:'offscreen_unavailable'})):Promise.resolve({drained:true,remaining:0})
-    ]);
+    ]):[previous?.content??{drained:false,reason:'previous_report_missing'},previous?.media??{drained:false,reason:'previous_report_missing'}];
     let backendClosed=false;try{await api(`/sessions/${s.id}/stop`,'POST',{},s.token);backendClosed=true;}catch{}
     lastStop={sessionId:s.id,content,media,backendClosed};
     await chrome.storage.session.set({lastStop});
+    if(backendClosed)await chrome.storage.session.remove('pendingStop');
+    else await chrome.storage.session.set({pendingStop:s});
   }
   await chrome.storage.session.remove('active');
   await chrome.action.setBadgeText({text:''});
@@ -31,6 +34,7 @@ async function stopOnce({drain=true}={}){
 }
 async function start(msg){
   if(await load())throw new Error('请先停止当前课程');
+  if((await chrome.storage.session.get('pendingStop')).pendingStop)throw new Error('上次课程停止尚未确认，请点击停止重试');
   const ocrLanguage=msg.ocrLanguage??'zh-Hans-CN';
   if(!['zh-Hans-CN','en-US'].includes(ocrLanguage))throw new Error('不支持此OCR语言');
   const tab=await chrome.tabs.get(msg.tabId);
@@ -77,7 +81,7 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
       if(changing)throw new Error('操作进行中');changing=true;
       try{if(msg.type==='STOP'){const lastStop=await stop();return {ok:true,lastStop};}return await start(msg);}finally{changing=false;}
     }
-    if(msg.type==='STATUS')return s?{active:true,sessionId:s.id,context:await api(`/sessions/${s.id}/context`,'GET',undefined,s.token)}:{active:false,lastError:(await chrome.storage.session.get('lastError')).lastError||null,lastStop:(await chrome.storage.session.get('lastStop')).lastStop||null};
+    if(msg.type==='STATUS')return s?{active:true,sessionId:s.id,context:await api(`/sessions/${s.id}/context`,'GET',undefined,s.token)}:{active:false,pendingStop:!!(await chrome.storage.session.get('pendingStop')).pendingStop,lastError:(await chrome.storage.session.get('lastError')).lastError||null,lastStop:(await chrome.storage.session.get('lastStop')).lastStop||null};
     if(msg.type==='ASK'){if(!s)throw new Error('课程未启动');return api(`/sessions/${s.id}/ask`,'POST',{question:msg.question},s.token);}
     if(msg.type==='CAPTURE_ENDED'){await stop({drain:false});return {ok:true};}
     throw new Error('unknown action');
