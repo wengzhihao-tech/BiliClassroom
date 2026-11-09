@@ -23,9 +23,11 @@ async function stop(options={}){
   stopping=stopOnce(options);
   try{return await stopping;}finally{stopping=null;}
 }
-async function stopOnce({drain=true,acknowledgeMissing=false}={}){
+async function stopOnce({drain=true,acknowledgeMissing=false,expectedSessionId,lastError}={}){
   const active=await load(),pending=(await chrome.storage.session.get('pendingStop')).pendingStop,s=active||pending;let lastStop=null;
+  if(expectedSessionId!==undefined&&active?.id!==expectedSessionId)return null;
   if(s){
+    if(lastError)await chrome.storage.session.set({lastError});
     const previous=(await chrome.storage.session.get('lastStop')).lastStop;
     const [content,media]=active?await Promise.all([
       bounded(chrome.tabs.sendMessage(s.tabId,{type:'COLLECT_STOP',drain})).catch(()=>({drained:false,reason:'tab_unavailable'})),
@@ -92,7 +94,10 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
       }
       if(msg.type==='EVENTS'){
         try{return await api(`/sessions/${s.id}/events`,'POST',{events:msg.events},s.token);}
-        catch(e){if(e.status===413){await chrome.storage.session.set({lastError:'课程采集达到本地配额，已自动停止。'});void stop({drain:false});}throw e;}
+        catch(e){
+          if(e.status===413)void stop({drain:false,expectedSessionId:s.id,lastError:'课程采集达到本地配额，已自动停止。'}).catch(()=>{});
+          throw e;
+        }
       }
       throw new Error('unsupported content message');
     }
@@ -102,7 +107,12 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
     }
     if(msg.type==='STATUS')return s?{active:true,sessionId:s.id,context:await api(`/sessions/${s.id}/context`,'GET',undefined,s.token)}:{active:false,pendingStop:!!(await chrome.storage.session.get('pendingStop')).pendingStop,lastError:(await chrome.storage.session.get('lastError')).lastError||null,lastStop:(await chrome.storage.session.get('lastStop')).lastStop||null};
     if(msg.type==='ASK'){if(!s)throw new Error('课程未启动');return api(`/sessions/${s.id}/ask`,'POST',{question:msg.question},s.token);}
-    if(msg.type==='CAPTURE_ENDED'){await stop({drain:false});return {ok:true};}
+    if(msg.type==='CAPTURE_ENDED'){
+      if(!s||msg.sessionId!==s.id)return {ok:true};
+      const lastError=msg.reason==='quota'?'音画采集达到本地配额，已自动停止。':undefined;
+      await stop({drain:false,expectedSessionId:msg.sessionId,lastError});
+      return {ok:true};
+    }
     throw new Error('unknown action');
   })().then(respond).catch(e=>respond({ok:false,error:e.message}));
   return true;

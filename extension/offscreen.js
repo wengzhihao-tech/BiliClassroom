@@ -20,7 +20,12 @@ async function pumpOnce(){
   const current=session,target=queue,batch=target.slice(0,2);
   try{
     const r=await fetch(`${endpoint}/sessions/${current.id}/events`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${current.token}`},body:JSON.stringify({events:batch}),signal:AbortSignal.timeout(4000)});
-    if(r.status===413){await chrome.storage.session.set({lastError:'音画采集达到本地配额，已自动停止。'});void chrome.runtime.sendMessage({type:'CAPTURE_ENDED'}).catch(()=>{});return;}
+    if(r.status===413){
+      if(session===current&&!stoppingCapture){
+        void chrome.runtime.sendMessage({type:'CAPTURE_ENDED',sessionId:current.id,reason:'quota'}).catch(()=>{});
+      }
+      return;
+    }
     if(!r.ok)throw new Error('ingest rejected');
     if(session===current&&queue===target){target.splice(0,batch.length);flushDrops();}
   }catch{}
@@ -98,7 +103,12 @@ async function start(msg){
       audio:session.audio?{mandatory:{chromeMediaSource:'tab',chromeMediaSourceId:msg.streamId}}:false,
       video:session.frames?{mandatory:{chromeMediaSource:'tab',chromeMediaSourceId:msg.streamId,maxWidth:1280,maxHeight:720,maxFrameRate:2}}:false
     });
-    for(const track of stream.getTracks())track.onended=()=>{if(session)chrome.runtime.sendMessage({type:'CAPTURE_ENDED'}).catch(()=>{});};
+    const owner=session;
+    for(const track of stream.getTracks())track.onended=()=>{
+      if(session===owner&&!stoppingCapture){
+        void chrome.runtime.sendMessage({type:'CAPTURE_ENDED',sessionId:owner.id}).catch(()=>{});
+      }
+    };
     if(session.audio){
       ctx=new AudioContext();await ctx.audioWorklet.addModule('pcm-worklet.js');
       const source=ctx.createMediaStreamSource(stream);source.connect(ctx.destination); // preserve audible course playback
