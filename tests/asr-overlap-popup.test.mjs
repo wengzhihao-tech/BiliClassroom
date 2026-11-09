@@ -35,3 +35,25 @@ test('word-scoped empty aggregate never falls back to out-of-range structured te
  assert(!summary.includes('FUTURE'));
  assert(summary.includes('LEGACY'));
 });
+
+test('speech summary distinguishes missing audio, processing, and service-wide skips',()=>{
+ const status={active:true,context:{availability:{audioChunks:0},asrRuntime:{
+  status:'configured_backend_unverified',currentSession:true,active:true,pending:true,
+  inputGate:{skippedWindows:3},queue:{replaced:2}
+ }}};
+ const text=recognitionSummary(status);
+ for(const expected of ['当前时间窗未收到音频片段','正在识别，有一个窗口等待处理','服务启动以来','能量筛选跳过 3','排队被替换 2'])assert(text.includes(expected));
+});
+test('speech summary differentiates faults and tolerates older context payloads',()=>{
+ for(const [status,label] of [['disabled_no_backend','未连接本地识别后端'],['blocked_backend_timeout','识别任务超时'],['blocked_backend_errors','识别后端连续失败'],[undefined,'状态未知']]){
+  const text=recognitionSummary({active:true,context:{asrRuntime:{status,active:true,pending:true}}});
+  assert(text.includes(label));
+  assert(!text.includes('正在识别'));
+ }
+ const historical=recognitionSummary({active:true,context:{asrRuntime:{
+  status:'configured_backend_unverified',currentSession:false,active:true,pending:true,inputGate:{skippedWindows:4},queue:{replaced:3}
+ }}});
+ assert(historical.includes('输出待核验'));
+ assert(!historical.includes('正在识别'));
+ assert(!historical.includes('服务启动以来'));
+});

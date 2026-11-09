@@ -25,11 +25,36 @@ const overlapSummary=view=>{
  }
  return lines;
 };
+function speechRuntimeSummary(context){
+ const runtime=context.asrRuntime;
+ const labels={
+  disabled_no_backend:'未连接本地识别后端',
+  blocked_backend_timeout:'已暂停，识别任务超时',
+  blocked_backend_errors:'已暂停，识别后端连续失败',
+  configured_backend_unverified:'本地后端已连接，输出待核验',
+ };
+ const label=Object.hasOwn(labels,runtime?.status)?labels[runtime.status]:'状态未知';
+ const lines=['语音识别：'+label];
+ if(context.availability?.audioChunks===0)lines.push('当前时间窗未收到音频片段。');
+ if(runtime?.status==='configured_backend_unverified'&&runtime.currentSession===true){
+  if(runtime.active)lines.push(runtime.pending?'正在识别，有一个窗口等待处理。':'正在识别。');
+  else if(runtime.pending)lines.push('有一个窗口等待处理。');
+ }
+ if(runtime?.currentSession===true){
+  const counts=[];
+  const skipped=runtime.inputGate?.skippedWindows,replaced=runtime.queue?.replaced;
+  if(Number.isSafeInteger(skipped)&&skipped>0)counts.push('能量筛选跳过 '+skipped+' 个窗口');
+  if(Number.isSafeInteger(replaced)&&replaced>0)counts.push('排队被替换 '+replaced+' 个窗口');
+  if(counts.length)lines.push('服务启动以来：'+counts.join('，')+'。');
+ }
+ return lines;
+}
+
 export function recognitionSummary(status){
  if(!status?.active||!status.context)return '尚未采集。只有点击“开始当前课程”才会采集音画。';
  const c=status.context,lang=c.ocrLanguage==='en-US'?'英文/代码':'中文/混合';
  const state=c.ocrRuntime?.status,ocrState=state==='disabled_no_backend'?'未连接':state?.startsWith('blocked_')?'已暂停识别（引擎超时或失败）':state==='configured_backend_unverified'?'已连接，输出待核验':'状态未知';
- const lines=['画面文字：'+ocrState+'；本课程语言：'+lang,'语言选择仅在下次开始课程时生效。','语音暂定与OCR未核验文字不属于教师事实，也不会进入默认问答。'];
+ const lines=[...speechRuntimeSummary(c),'画面文字：'+ocrState+'；本课程语言：'+lang,'语言选择仅在下次开始课程时生效。','语音暂定与OCR未核验文字不属于教师事实，也不会进入默认问答。'];
  for(const e of (c.evidence||[]).slice(-2))lines.push('\n字幕/稳定文字 · '+time(e.videoTime)+' · '+clip(e.id,100)+'\n'+clip(e.text));
  const overlap=overlapSummary(c.provisionalTranscript);
  if(overlap)lines.push(...overlap);

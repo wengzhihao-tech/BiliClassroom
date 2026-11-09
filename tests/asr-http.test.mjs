@@ -4,6 +4,7 @@ import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createApp} from '../server/index.mjs';
+import {recognitionSummary} from '../extension/evidence-view.js';
 const delay=ms=>new Promise(r=>setTimeout(r,ms)),defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve};};
 const audio=(id,t,epoch=0)=>{const pcm=Buffer.alloc(32000);for(let i=0;i<pcm.length;i+=2)pcm.writeInt16LE(i%160<80?4000:-4000,i);return{id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:1,data:pcm.toString('base64')};};
 async function fixture(fn,options={}){
@@ -121,6 +122,9 @@ test('HTTP journals DC audio without starting inference and exposes its gate cou
   const c=await ctx();
   assert.equal(c.availability.audioChunks,4);
   assert.equal(c.asrRuntime.inputGate.skippedWindows,1);
+  const text=recognitionSummary({active:true,context:c});
+  assert(text.includes('能量筛选跳过 1 个窗口'));
+  assert(!text.includes('当前时间窗未收到音频片段'));
   assert.equal(c.availability.asrProvisional,0);
   assert.equal(calls,0);
  },{asrBackend:async()=>{calls++;return 'unwanted output';}});
