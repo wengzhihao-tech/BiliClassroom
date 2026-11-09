@@ -3,6 +3,6 @@ test('backpressure loss remains visible when ACK occurs while paused',async()=>{
  let listener;const sent=[];const chrome={runtime:{onMessage:{addListener:f=>listener=f},sendMessage:async()=>{}},storage:{session:{set:async()=>{}}}};const context=vm.createContext({chrome,Date,crypto:{randomUUID},framePolicy,fetch:async(_u,o)=>{sent.push(JSON.parse(o.body));return {ok:true,status:200}},AbortSignal,setTimeout,clearTimeout,clearInterval,Uint8Array});
  vm.runInContext(readFileSync(new URL('../extension/offscreen.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'')+"\nsession={id:'s',token:'synthetic'};mapping={epoch:0,videoTime:10,wallTime:Date.now(),rate:1,paused:true};queue=[{id:'old'}];dropped=3;",context);
  await vm.runInContext('pump()',context);assert.equal(vm.runInContext('dropped',context),3);
- const response=await new Promise(r=>listener({target:'offscreen',type:'TIMELINE',data:{epoch:0,videoTime:10,wallTime:Date.now(),rate:1,paused:false}},{},r));assert(response.ok);await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));
+ const response=await new Promise(r=>listener({target:'offscreen',type:'TIMELINE',sessionId:'s',data:{epoch:0,videoTime:10,wallTime:Date.now(),rate:1,paused:false}},{},r));assert(response.ok);await new Promise(r=>setImmediate(r));await new Promise(r=>setImmediate(r));
  assert(sent.flatMap(b=>b.events).some(e=>e.kind==='gap'&&e.text.includes('3')));assert.equal(vm.runInContext('dropped',context),0);
 });

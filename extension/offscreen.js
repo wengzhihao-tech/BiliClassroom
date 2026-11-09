@@ -123,6 +123,9 @@ chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
   if(msg.target!=='offscreen')return;
   if(msg.type==='TIMELINE'){
     const previous=mapping,next=msg.data;
+    if(!session||msg.sessionId!==session.id||(previous&&next.epoch<previous.epoch)){
+      respond({ok:true,ignored:true});return;
+    }
     const boundary=!previous||previous.epoch!==next.epoch||previous.rate!==next.rate||previous.paused!==next.paused||Date.now()-previous.wallTime>2500;
     if(previous&&previous.epoch!==next.epoch){queue=[];frameBaseline=null;frameKey='';}
     mapping=next;if(boundary){blockedUntil=Date.now();resetPcm();}flushDrops();

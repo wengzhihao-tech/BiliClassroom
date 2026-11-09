@@ -20,7 +20,7 @@ function collector(){
   vm.runInNewContext(readFileSync(new URL('../extension/content.js',import.meta.url),'utf8'),
     {chrome,document,location,URL,Date,crypto:{randomUUID},setInterval:fn=>tick=fn,setTimeout,clearTimeout});
   return {sent,location,player,tick:()=>tick(),get current(){return current;},
-    replace(v){current=v;},start(){listener({type:'COLLECT_START'},{},()=>{});}};
+    replace(v){current=v;},start(sessionId='synthetic-session'){listener({type:'COLLECT_START',sessionId},{},()=>{});}};
 }
 const settled=()=>new Promise(resolve=>setImmediate(resolve));
 test('replaced player events cannot change current epoch or offscreen timeline',async()=>{
@@ -53,4 +53,13 @@ test('current player pause and rate changes still reach the timeline',async()=>{
   assert.equal(timelines.at(-1).data.paused,true);
   assert.equal(timelines.at(-1).data.rate,2);
   assert.equal(timelines.at(-1).data.epoch,0);
+});
+
+test('content attaches the original capture ID to each outgoing message',async()=>{
+ const c=collector();c.start('first');await settled();
+ c.location.href='https://www.bilibili.com/video/BV2y?p=2';c.tick();await settled();
+ assert.deepEqual(c.sent.map(m=>m.type),['TIMELINE','EVENTS','SOURCE_CHANGED']);
+ assert(c.sent.every(m=>m.sessionId==='first'));
+ c.start('second');await settled();
+ assert(c.sent.slice(3).every(m=>m.sessionId==='second'));
 });

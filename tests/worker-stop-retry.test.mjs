@@ -124,7 +124,7 @@ test('delayed content upload quota cannot stop a replacement session',async()=>{
   if(url.endsWith('/events'))return new Promise(resolve=>{finish=resolve;markStarted();});
   return {ok:true,json:async()=>({ok:true})};
  }});
- const pending=w.msg({type:'EVENTS',events:[]},{id:'ext',tab:{id:7}});
+ const pending=w.msg({type:'EVENTS',sessionId:'old-session',events:[]},{id:'ext',tab:{id:7}});
  await started;
  store.active={...active(),id:'new-session'};
  finish({status:413,ok:false});

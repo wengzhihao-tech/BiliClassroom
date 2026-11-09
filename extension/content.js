@@ -1,7 +1,8 @@
 (() => {
   let active=false,epoch=0,queue=[],busy=false,initial='',lastCaption='',lastVideo=null,allowDanmaku=false,dropped=0,lastDropNotice=0;
   const attached=new WeakSet(),seenDanmaku=new Map();
-  const send=msg=>chrome.runtime.sendMessage(msg);
+  let sessionId;
+  const send=msg=>chrome.runtime.sendMessage({...msg,sessionId});
   function source(){const u=new URL(location.href);return u.origin+u.pathname+'?p='+(u.searchParams.get('p')||'1');}
   function video(){return document.querySelector('video');}
   function enqueue(kind,values={}){
@@ -75,6 +76,7 @@
   chrome.runtime.onMessage.addListener((msg,_sender,respond)=>{
     if(msg.type==='COLLECT_PROBE'){respond({ok:true});return;}
     if(msg.type==='COLLECT_START'){
+      sessionId=msg.sessionId;
       active=true;epoch=0;queue=[];dropped=0;lastDropNotice=0;initial=source();lastCaption='';lastVideo=null;seenDanmaku.clear();allowDanmaku=!!msg.danmaku;tick();respond({ok:true});
     }
     if(msg.type==='COLLECT_STOP'){stopCollector(msg.drain!==false).then(respond);return true;}

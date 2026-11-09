@@ -37,7 +37,7 @@ test('worker closes backend only after both producer stop acknowledgements',asyn
  const r=await p;assert.equal(r.lastStop.media.remaining,2);assert.equal(r.lastStop.backendClosed,true);assert.equal(w.stored.active,undefined);
 });
 test('quota error returns to producer without waiting on recursive stop',async()=>{
- const w=stoppingWorker({quota:true});const r=await Promise.race([w.msg({type:'EVENTS',events:[]},{id:'ext',tab:{id:7}}),new Promise(r=>setTimeout(()=>r({timeout:true}),250))]);
+ const w=stoppingWorker({quota:true});const r=await Promise.race([w.msg({type:'EVENTS',sessionId:'s',events:[]},{id:'ext',tab:{id:7}}),new Promise(r=>setTimeout(()=>r({timeout:true}),250))]);
  assert.equal(r.timeout,undefined);assert.match(r.error,/413/);w.contentAck.resolve({drained:false,remaining:1});w.mediaAck.resolve({drained:false,remaining:1});await turn();
 });
 function frameHarness(){

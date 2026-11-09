@@ -18,7 +18,7 @@ function offscreen(rate=1){
  const context=vm.createContext({Date:{now:()=>now},crypto:{randomUUID},Float32Array,ArrayBuffer,DataView,Uint8Array,Number,Math,btoa,AbortSignal,setTimeout,clearTimeout,clearInterval,chrome:{runtime:{onMessage:{addListener:f=>listener=f}},storage:{session:{set:async()=>{}}}},fetch:async(_u,opt)=>{calls.push(JSON.parse(opt.body));return{ok:true,status:200};}});
  const src=readFileSync(new URL('../extension/offscreen.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'');
  context.resets=resets;vm.runInContext(src+"\nsession={id:'synthetic',token:'synthetic',audio:true};mapping={epoch:0,videoTime:110,wallTime:12000,rate:"+rate+",paused:false};ctx={currentTime:12,state:'running'};node={port:{postMessage:m=>resets.push(m)}};pcmGeneration=1;",context);
- return{calls,resets,context,pcm(extra={}){context.message={samples:new Float32Array(48000).fill(0.25),sampleRate:48000,generation:1,audioEndTime:11.8,...extra};vm.runInContext('pcm(message)',context);},timeline(extra={}){listener({target:'offscreen',type:'TIMELINE',data:{epoch:0,videoTime:110,wallTime:now,rate,paused:false,...extra}},null,()=>{});},now(t){now=t;}};
+ return{calls,resets,context,pcm(extra={}){context.message={samples:new Float32Array(48000).fill(0.25),sampleRate:48000,generation:1,audioEndTime:11.8,...extra};vm.runInContext('pcm(message)',context);},timeline(extra={},sessionId='synthetic'){listener({target:'offscreen',type:'TIMELINE',sessionId,data:{epoch:0,videoTime:110,wallTime:now,rate,paused:false,...extra}},null,()=>{});},now(t){now=t;}};
 }
 test('delayed PCM delivery uses source sample clock at both playback rates',async()=>{
  for(const rate of [1,2]){const h=offscreen(rate);h.pcm();await turn();const e=h.calls[0].events[0];assert(Math.abs(e.videoTime-(110-1.2*rate))<0.001);assert.equal(e.duration,1);assert.equal(Buffer.from(e.data,'base64').length,32000);}
@@ -34,4 +34,14 @@ test('ordinary timeline ticks retain partial generation; malformed old or stale 
  const h=offscreen();h.timeline();assert.equal(h.resets.length,0);
  for(const extra of [{generation:0},{audioEndTime:9},{audioEndTime:13},{sampleRate:0},{samples:new Float32Array(0)},{audioEndTime:NaN}])h.pcm(extra);
  await turn();assert.equal(h.calls.length,0);h.pcm();await turn();assert.equal(h.calls.length,1);
+});
+
+test('stale session clocks and older seek epochs cannot reset current audio mapping',()=>{
+ const h=offscreen();
+ h.timeline({epoch:2,videoTime:115});
+ h.timeline({epoch:8,videoTime:500},'old-session');
+ h.timeline({epoch:1,videoTime:40});
+ assert.equal(h.resets.length,1);
+ assert.equal(vm.runInContext('mapping.epoch',h.context),2);
+ assert.equal(vm.runInContext('mapping.videoTime',h.context),115);
 });

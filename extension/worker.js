@@ -76,7 +76,7 @@ async function start(msg){
       const r=await chrome.runtime.sendMessage({target:'offscreen',type:'CAPTURE_START',streamId,session:s});
       if(!r?.ok)throw new Error(r?.error||'采集初始化失败');
     }
-    await chrome.tabs.sendMessage(tab.id,{type:'COLLECT_START',danmaku:s.danmaku});
+    await chrome.tabs.sendMessage(tab.id,{type:'COLLECT_START',sessionId:s.id,danmaku:s.danmaku});
     await chrome.action.setBadgeText({text:'REC'});await chrome.action.setBadgeBackgroundColor({color:'#b44231'});
     return {ok:true,sessionId:id};
   }catch(e){await stop();throw e;}
@@ -88,9 +88,10 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
     const s=await load();
     if(sender.tab){
       if(!s||sender.tab.id!==s.tabId)throw new Error('inactive tab');
-      if(msg.type==='SOURCE_CHANGED'){await stop();return {ok:true};}
+      if(msg.sessionId!==s.id)throw new Error('inactive capture session');
+      if(msg.type==='SOURCE_CHANGED'){await stop({expectedSessionId:s.id});return {ok:true};}
       if(msg.type==='TIMELINE'){
-        await chrome.runtime.sendMessage({target:'offscreen',type:'TIMELINE',data:msg.data}).catch(()=>{});return {ok:true};
+        await chrome.runtime.sendMessage({target:'offscreen',type:'TIMELINE',sessionId:s.id,data:msg.data}).catch(()=>{});return {ok:true};
       }
       if(msg.type==='EVENTS'){
         try{return await api(`/sessions/${s.id}/events`,'POST',{events:msg.events},s.token);}
