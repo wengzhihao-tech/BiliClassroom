@@ -11,3 +11,17 @@ test('popup consumes current aggregate and remains compatible with previous meth
   assert(text.includes('重叠已合并'));assert(text.includes('audio1[0,8000)'));assert(!text.includes('FALLBACK'));
  }
 });
+
+test('popup labels distinct-window agreement and keeps audio and event references',()=>{
+ const word={word:'控制',videoStart:2,videoEnd:2.5,confidence:1,sourceSpans:[{id:'audio1',startSample:0,endSample:8000}]};
+ const events=[0,2].map(windowStart=>({id:'asr-'+windowStart,kind:'asr',epoch:0,engine:'vosk',playbackRate:1,stability:'provisional',windowStart,words:[word]}));
+ const view=provisionalTranscript(events);
+ const text=recognitionSummary({active:true,context:{provisionalTranscript:view}});
+ assert(text.includes('多窗口一致'));
+ assert(text.includes('语音暂定'));
+ assert(text.includes('asr-2#0'));
+ assert(text.includes('audio1[0,8000)'));
+ const legacy=structuredClone(view);
+ delete legacy.groups[0].windowAgreement;
+ assert(!recognitionSummary({active:true,context:{provisionalTranscript:legacy}}).includes('多窗口一致'));
+});

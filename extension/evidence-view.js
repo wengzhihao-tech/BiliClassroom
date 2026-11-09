@@ -12,7 +12,10 @@ const overlapSummary=view=>{
  for(const g of shown){
   const conflicts=Array.isArray(g.conflicts)?g.conflicts.slice(0,3):[];
   const alternatives=conflicts.map(id=>clip(byId.get(id)?.word||id,100));
-  lines.push(time(g.videoStart)+'–'+time(g.videoEnd)+' · '+clip(g.word,100)+(alternatives.length?' · 存在冲突：'+alternatives.join(' / '):''));
+  const agreement = {agrees:'多窗口一致',single_window:'单窗口支持',unassessed:'一致性未评估'};
+  const label = alternatives.length ? '存在冲突：'+alternatives.join(' / ') :
+   Object.hasOwn(agreement,g.windowAgreement) ? agreement[g.windowAgreement] : '';
+  lines.push(time(g.videoStart)+'–'+time(g.videoEnd)+' · '+clip(g.word,100)+(label?' · '+label:''));
   for(const o of g.observations.slice(0,2)){
    const spans=Array.isArray(o.sourceSpans)?o.sourceSpans.slice(0,3):[];
    const audio=spans.map(p=>clip(p.id,100)+'['+p.startSample+','+p.endSample+')').join(', ');

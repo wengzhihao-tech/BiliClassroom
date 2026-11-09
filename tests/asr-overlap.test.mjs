@@ -42,3 +42,37 @@ test('overlap chains do not collapse separate repeated words and preserve observ
  assert.equal(r.groups.reduce((n,g)=>n+g.observations.length,0),3);
  assert.equal(JSON.stringify(es),before);assert(r.groups.every(g=>g.stability==='provisional'));
 });
+
+test('agreement needs distinct window starts and remains provisional in context',()=>{
+ const a=event('first'), retry=event('retry'), b=event('later',undefined,{windowStart:2,videoTime:2});
+ const s={id:'s',source:{},lastEpoch:0,events:[a,retry],closed:true};
+ assert.equal(contextFor(s,{at:4}).provisionalTranscript.groups[0].windowAgreement,'single_window');
+ s.events.push(b);
+ const c=contextFor(s,{at:4});
+ assert.equal(c.provisionalTranscript.groups[0].windowAgreement,'agrees');
+ assert.equal(c.provisionalTranscript.groups[0].stability,'provisional');
+ assert.deepEqual(c.provisionalTranscript.groups[0].observations.map(o=>o.eventId),['later','retry','first']);
+ assert.equal(c.evidence.length,0);
+});
+test('later conflicting audio hypothesis withdraws agreement, preserving alternatives',()=>{
+ const events=[event('first'),event('later',undefined,{windowStart:2,videoTime:2})];
+ assert.equal(provisionalTranscript(events).groups[0].windowAgreement,'agrees');
+ events.push(event('conflict',[word('空置')],{windowStart:3,videoTime:3}));
+ const result=provisionalTranscript(events);
+ assert.equal(result.groups.length,2);
+ assert(result.groups.every(group=>group.windowAgreement==='conflicting'));
+ assert(result.groups.every(group=>group.conflicts.length===1));
+});
+test('unknown timing or an exhausted group cap cannot imply agreement',()=>{
+ const a=event('a',undefined,{windowStart:undefined});
+ assert.equal(provisionalTranscript([a]).groups[0].windowAgreement,'unassessed');
+ const unrelated=j=>Array.from({length:256},(_,i)=>word('word'+j+'_'+i,0,8000,'audio'+j+'_'+i));
+ const result=provisionalTranscript([
+  event('omitted',[word('空置')]),event('old',undefined,{windowStart:1}),
+  event('many1',unrelated(1)),event('many2',unrelated(2)),event('new',undefined,{windowStart:3})
+ ]);
+ assert.equal(result.truncated,true);
+ const group=result.groups.find(g=>g.word==='控制');
+ assert.equal(group.observations.length,2);
+ assert.equal(group.windowAgreement,'unassessed');
+});
