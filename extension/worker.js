@@ -3,7 +3,16 @@ let changing=false;
 const load=async()=> (await chrome.storage.session.get('active')).active;
 async function api(route,method='GET',body,token){
   const r=await fetch(base+route,{method,headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(5000)});
-  if(!r.ok){const e=new Error(`本地服务 HTTP ${r.status}`);e.status=r.status;throw e;}return r.json();
+  if(!r.ok){
+    const e=new Error(`本地服务 HTTP ${r.status}`);
+    e.status=r.status;
+    if(r.status===404&&method==='POST'&&route.endsWith('/stop')){
+      const detail=await r.json().catch(()=>null);
+      e.sessionMissing=detail?.error==='unknown session';
+    }
+    throw e;
+  }
+  return r.json();
 }
 let stopping=null;
 function bounded(p,ms=4000){
@@ -14,7 +23,7 @@ async function stop(options={}){
   stopping=stopOnce(options);
   try{return await stopping;}finally{stopping=null;}
 }
-async function stopOnce({drain=true}={}){
+async function stopOnce({drain=true,acknowledgeMissing=false}={}){
   const active=await load(),pending=(await chrome.storage.session.get('pendingStop')).pendingStop,s=active||pending;let lastStop=null;
   if(s){
     const previous=(await chrome.storage.session.get('lastStop')).lastStop;
@@ -22,10 +31,20 @@ async function stopOnce({drain=true}={}){
       bounded(chrome.tabs.sendMessage(s.tabId,{type:'COLLECT_STOP',drain})).catch(()=>({drained:false,reason:'tab_unavailable'})),
       s.audio||s.frames?bounded(chrome.runtime.sendMessage({target:'offscreen',type:'CAPTURE_STOP',drain})).catch(()=>({drained:false,reason:'offscreen_unavailable'})):Promise.resolve({drained:true,remaining:0})
     ]):[previous?.content??{drained:false,reason:'previous_report_missing'},previous?.media??{drained:false,reason:'previous_report_missing'}];
-    let backendClosed=false;try{await api(`/sessions/${s.id}/stop`,'POST',{},s.token);backendClosed=true;}catch{}
+    let backendClosed=false, sessionMissing=false;
+    try{
+      await api(`/sessions/${s.id}/stop`,'POST',{},s.token);
+      backendClosed=true;
+    }catch(error){
+      sessionMissing=acknowledgeMissing&&error.sessionMissing===true;
+    }
     lastStop={sessionId:s.id,content,media,backendClosed};
+    if(sessionMissing){
+      lastStop.backendStatus='missing';
+      lastStop.message='本地服务找不到旧会话，已解除下次采集的阻塞。旧会话关闭状态未知。';
+    }
     await chrome.storage.session.set({lastStop});
-    if(backendClosed)await chrome.storage.session.remove('pendingStop');
+    if(backendClosed||sessionMissing)await chrome.storage.session.remove('pendingStop');
     else await chrome.storage.session.set({pendingStop:s});
   }
   await chrome.storage.session.remove('active');
@@ -79,7 +98,7 @@ chrome.runtime.onMessage.addListener((msg,sender,respond)=>{
     }
     if(msg.type==='START'||msg.type==='STOP'){
       if(changing)throw new Error('操作进行中');changing=true;
-      try{if(msg.type==='STOP'){const lastStop=await stop();return {ok:true,lastStop};}return await start(msg);}finally{changing=false;}
+      try{if(msg.type==='STOP'){const lastStop=await stop({acknowledgeMissing:true});return {ok:true,lastStop};}return await start(msg);}finally{changing=false;}
     }
     if(msg.type==='STATUS')return s?{active:true,sessionId:s.id,context:await api(`/sessions/${s.id}/context`,'GET',undefined,s.token)}:{active:false,pendingStop:!!(await chrome.storage.session.get('pendingStop')).pendingStop,lastError:(await chrome.storage.session.get('lastError')).lastError||null,lastStop:(await chrome.storage.session.get('lastStop')).lastStop||null};
     if(msg.type==='ASK'){if(!s)throw new Error('课程未启动');return api(`/sessions/${s.id}/ask`,'POST',{question:msg.question},s.token);}
