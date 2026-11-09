@@ -25,3 +25,13 @@ test('popup labels distinct-window agreement and keeps audio and event reference
  delete legacy.groups[0].windowAgreement;
  assert(!recognitionSummary({active:true,context:{provisionalTranscript:legacy}}).includes('多窗口一致'));
 });
+
+test('word-scoped empty aggregate never falls back to out-of-range structured text',()=>{
+ const status={active:true,context:{
+  provisionalTranscript:{method:'exact_text_all_observations_sample_iou_0.5',groups:[],wordTimeScoped:true},
+  provisionalEvidence:[{id:'structured',text:'FUTURE',words:[{}]},{id:'legacy',text:'LEGACY'}]
+ }};
+ const summary=recognitionSummary(status);
+ assert(!summary.includes('FUTURE'));
+ assert(summary.includes('LEGACY'));
+});

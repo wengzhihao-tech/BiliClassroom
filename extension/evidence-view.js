@@ -33,7 +33,8 @@ export function recognitionSummary(status){
  for(const e of (c.evidence||[]).slice(-2))lines.push('\n字幕/稳定文字 · '+time(e.videoTime)+' · '+clip(e.id,100)+'\n'+clip(e.text));
  const overlap=overlapSummary(c.provisionalTranscript);
  if(overlap)lines.push(...overlap);
- else for(const e of (c.provisionalEvidence||[]).slice(-3))lines.push('\n语音暂定 · '+time(e.videoTime)+' · '+clip(e.id,100)+'\n'+clip(e.text)+'\n音频来源：'+refs(e.sourceEventIds));
+ else for(const e of (c.provisionalEvidence||[])
+  .filter(e=>!c.provisionalTranscript?.wordTimeScoped||!Array.isArray(e.words)).slice(-3))lines.push('\n语音暂定 · '+time(e.videoTime)+' · '+clip(e.id,100)+'\n'+clip(e.text)+'\n音频来源：'+refs(e.sourceEventIds));
  for(const e of (c.ocrEvidence||[]).slice(-3))lines.push('\nOCR未核验 · '+time(e.videoTime)+' · '+clip(e.id,100)+'\n'+clip(e.text)+'\n画面来源：'+refs(e.sourceEventIds));
  if(!(c.ocrEvidence||[]).length)lines.push('\n当前时间窗暂无画面文字。');
  return lines.join('\n');

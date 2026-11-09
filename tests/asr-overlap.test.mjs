@@ -76,3 +76,21 @@ test('unknown timing or an exhausted group cap cannot imply agreement',()=>{
  assert.equal(group.observations.length,2);
  assert.equal(group.windowAgreement,'unassessed');
 });
+
+test('context scopes structured ASR by word end and preserves original word indexes',()=>{
+ const older=event('earlier-window',[word('before',0,8000),word('inside',10000,11500),word('future',15000,16000)],{windowStart:0,videoTime:0});
+ const s={id:'s',source:{},lastEpoch:0,closed:true,events:[older]};
+ const c=contextFor(s,{at:2.5,window:1});
+ assert.equal(c.provisionalTranscript.wordTimeScoped,true);
+ assert.deepEqual(c.provisionalTranscript.groups.map(g=>g.word),['before','inside']);
+ assert.equal(c.provisionalTranscript.groups[1].observations[0].wordIndex,1);
+ assert.deepEqual(c.provisionalTranscript.groups[1].observations[0].sourceSpans,older.words[1].sourceSpans);
+ assert.equal(c.evidence.length,0);
+});
+test('past context keeps raw diagnostics while suppressing future structured words',()=>{
+ const e=event('recent',[word('future',10000,15000)],{windowStart:2,videoTime:2});
+ const s={id:'s',source:{},lastEpoch:0,closed:true,events:[e]};
+ const c=contextFor(s,{at:2.2});
+ assert.deepEqual(c.provisionalTranscript.groups,[]);
+ assert.equal(c.provisionalEvidence[0].text,'future');
+});

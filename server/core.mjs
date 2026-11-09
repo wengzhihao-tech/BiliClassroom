@@ -116,12 +116,13 @@ export function contextFor(s,{epoch=s.lastEpoch,at,window=90}={}) {
   const anchor=same.findLast(e=>e.kind==='playback') ??
     same.findLast(e=>e.kind!=='asr'&&e.kind!=='ocr') ?? same.at(-1);
   at ??= anchor?.videoTime ?? 0;
-  const es=same.filter(e=>e.videoTime<=at+0.25 && e.videoTime>=Math.max(0,at-window));
+  const from=Math.max(0,at-window), to=at+0.25;
+  const es=same.filter(e=>e.videoTime<=to && e.videoTime>=from);
   const count=k=>es.filter(e=>e.kind===k).length;
   const evidence=es.filter(e=>['subtitle','asr'].includes(e.kind)&&(e.kind!=='asr'||e.stability==='stable')).slice(-80).map(e=>({id:e.id,kind:e.kind,videoTime:e.videoTime,text:e.text,sourceEventIds:e.sourceEventIds||[],...(e.kind==='asr'?{stability:e.stability}:{})}));
   return {sessionId:s.id,source:s.source,ocrLanguage:s.ocrLanguage||'zh-Hans-CN',epoch,at,window,closed:s.closed,evidence,
     ocrEvidence:es.filter(e=>e.kind==='ocr').slice(-20).map(e=>({id:e.id,kind:e.kind,videoTime:e.videoTime,text:e.text,rawText:e.rawText,sourceEventIds:e.sourceEventIds||[],quality:'unverified',confidence:null,engine:e.engine,language:e.language})),
-    provisionalTranscript:provisionalTranscript(es),
+    provisionalTranscript:provisionalTranscript(same,{from,to}),
     provisionalEvidence:es.filter(e=>e.kind==='asr'&&e.stability!=='stable').slice(-20).map(e=>({id:e.id,kind:e.kind,videoTime:e.videoTime,text:e.text,sourceEventIds:e.sourceEventIds||[],stability:'provisional',...(e.words?{words:e.words,windowStart:e.windowStart,windowEnd:e.windowEnd,audioDuration:e.audioDuration,playbackRate:e.playbackRate,timing:e.timing,engine:e.engine}:{})})),
     availability:{subtitle:count('subtitle'),audioChunks:count('audio'),frames:count('frame'),asr:es.filter(e=>e.kind==='asr'&&e.stability==='stable').length,asrProvisional:es.filter(e=>e.kind==='asr'&&e.stability!=='stable').length,ocr:count('ocr'),danmaku:count('danmaku')},
     gaps:es.filter(e=>e.kind==='gap').map(e=>({videoTime:e.videoTime,text:e.text,media:e.media||'all'})),
