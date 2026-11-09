@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createApp} from '../server/index.mjs';
 const delay=ms=>new Promise(r=>setTimeout(r,ms)),defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve};};
-const audio=(id,t,epoch=0)=>{const pcm=Buffer.alloc(32000);for(let i=0;i<pcm.length;i+=2)pcm.writeInt16LE(4000,i);return{id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:1,data:pcm.toString('base64')};};
+const audio=(id,t,epoch=0)=>{const pcm=Buffer.alloc(32000);for(let i=0;i<pcm.length;i+=2)pcm.writeInt16LE(i%160<80?4000:-4000,i);return{id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:1,data:pcm.toString('base64')};};
 async function fixture(fn,options={}){
  const dir=mkdtempSync(path.join(tmpdir(),'biliclass-asr-http-')),token='c'.repeat(64),app=createApp({dataDir:dir,token,...options});
  await new Promise(r=>app.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+app.address().port;
@@ -109,4 +109,19 @@ test('HTTP exposes sticky backend error circuit after three failures without new
   const c=await until(c=>c.asrRuntime.status==='blocked_backend_errors');assert.equal(c.asrRuntime.failures.consecutive,3);assert.equal(c.asrRuntime.pending,false);
   await feed(0,8,'later');await delay(10);assert.equal(calls,3);assert.equal(c.evidence.length,0);
  },{asrBackend:async()=>{calls++;throw Error('synthetic backend failure');}});
+});
+
+test('HTTP journals DC audio without starting inference and exposes its gate count',async()=>{
+ let calls=0;
+ await fixture(async({req,id,ctx})=>{
+  const pcm=Buffer.alloc(32000);
+  for(let i=0;i<pcm.length;i+=2)pcm.writeInt16LE(5000,i);
+  const events=[0,1,2,3].map(i=>({...audio('dc'+i,i),data:pcm.toString('base64')}));
+  assert.equal((await req('/sessions/'+id+'/events',{events})).status,200);
+  const c=await ctx();
+  assert.equal(c.availability.audioChunks,4);
+  assert.equal(c.asrRuntime.inputGate.skippedWindows,1);
+  assert.equal(c.availability.asrProvisional,0);
+  assert.equal(calls,0);
+ },{asrBackend:async()=>{calls++;return 'unwanted output';}});
 });

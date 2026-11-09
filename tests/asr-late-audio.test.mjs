@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {AudioWindows} from '../server/asr-pipeline.mjs';import {AsrBridge} from '../server/asr-bridge.mjs';
-const audio=(id,t,epoch=0)=>({id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:1,data:Buffer.alloc(32000,8).toString('base64')});
+const testPcm=Buffer.alloc(32000);
+for(let i=0;i<testPcm.length;i+=2)testPcm.writeInt16LE(i%160<80?4000:-4000,i);
+const audio=(id,t,epoch=0)=>({id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:1,data:testPcm.toString('base64')});
 test('late audio does not rewind a same-epoch window; seek epoch still resets',()=>{
  const p=new AudioWindows();for(let i=0;i<4;i++)p.push('s',audio('a'+i,i));
  const before=p.samples,segment=p.segment;

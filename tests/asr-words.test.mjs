@@ -3,7 +3,7 @@ import {mkdtempSync,rmSync,readFileSync} from 'node:fs';import path from 'node:p
 import {normalizeAsrResult} from '../server/asr-words.mjs';import {newSession,prepareEvents,commitEvents} from '../server/core.mjs';import {createApp} from '../server/index.mjs';
 const window=(rate=1)=>({sampleRate:16000,audioDuration:4,playbackRate:rate,videoTime:50,spans:[0,1,2,3].map(i=>({id:'a'+i,startSample:0,endSample:16000}))});
 const result=()=>({text:'synthetic word',engine:'vosk',recognitionMs:1,words:[{word:'synthetic',start:0.8,end:1.2,conf:0.75}]});
-const audio=(i,rate=1)=>({id:'a'+i,kind:'audio',epoch:0,videoTime:50+i*rate,captureTime:1,data:Buffer.from(new Int16Array(16000).fill(4000).buffer).toString('base64'),duration:1,sampleRate:16000,channels:1,playbackRate:rate});
+const audio=(i,rate=1)=>({id:'a'+i,kind:'audio',epoch:0,videoTime:50+i*rate,captureTime:1,data:Buffer.from(Int16Array.from({length:16000},(_,i)=>i%80<40?4000:-4000).buffer).toString('base64'),duration:1,sampleRate:16000,channels:1,playbackRate:rate});
 const source={url:'https://www.bilibili.com/video/BV1synthetic'};
 test('word crossing chunk boundary retains exact original audio sample references',()=>{
  const r=normalizeAsrResult(result(),window());assert.deepEqual(r.words[0].sourceSpans,[{id:'a0',startSample:12800,endSample:16000},{id:'a1',startSample:0,endSample:3200}]);

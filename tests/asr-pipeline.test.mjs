@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {AudioWindows,TranscriptionQueue} from '../server/asr-pipeline.mjs';
 import {newSession,prepareEvents,commitEvents,contextFor,validateEvent} from '../server/core.mjs';
-const audio=(id,t,{epoch=0,rate=1,silent=false}={})=>{const data=Buffer.alloc(32000);if(!silent)for(let i=0;i<data.length;i+=2)data.writeInt16LE(4000,i);return{id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:rate,data:data.toString('base64')};};
+const audio=(id,t,{epoch=0,rate=1,silent=false}={})=>{const data=Buffer.alloc(32000);if(!silent)for(let i=0;i<data.length;i+=2)data.writeInt16LE(i%160<80?4000:-4000,i);return{id,kind:'audio',epoch,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:rate,data:data.toString('base64')};};
 function feed(p,n=6,opts={}){const windows=[];for(let i=0;i<n;i++)windows.push(...p.push('s',audio('a'+i,i*(opts.rate||1),opts)).windows);return windows;}
 const defer=()=>{let resolve;const promise=new Promise(r=>resolve=r);return{promise,resolve};};
 const tick=()=>new Promise(r=>setImmediate(r));
@@ -73,4 +73,30 @@ test('valid empty recognition and successful delivery reset consecutive errors',
 test('explicit cancellation is excluded from consecutive engine error circuit',async()=>{
  const w=feed(new AudioWindows())[0];let reject;const q=new TranscriptionQueue(()=>new Promise((_r,j)=>reject=j),()=>{});
  q.submit(w);q.invalidate();reject(Error('cancelled process'));await q.idle();assert.equal(q.metrics.errors,0);assert.equal(q.consecutiveFailures,0);assert.equal(q.faulted,false);
+});
+
+test('DC-biased silence and one isolated full-scale click are filtered',()=>{
+ for(const click of [false,true]){
+  const p=new AudioWindows(),windows=[];
+  for(let i=0;i<4;i++){
+   const pcm=Buffer.alloc(32000);
+   for(let j=0;j<pcm.length;j+=2)pcm.writeInt16LE(5000,j);
+   if(click&&i===1)pcm.writeInt16LE(32767,240);
+   windows.push(...p.push('s',{...audio('dc'+i,i),data:pcm.toString('base64')}).windows);
+  }
+  assert.equal(windows.length,0);
+  assert.equal(p.metrics.silenceWindows,1);
+ }
+});
+test('short sustained audio survives quiet remainder without modifying original PCM',()=>{
+ const p=new AudioWindows(),windows=[],original=[];
+ for(let i=0;i<4;i++){
+  const pcm=Buffer.alloc(32000);
+  if(i===2)for(let j=0;j<1920;j+=2)pcm.writeInt16LE(j%160<80?800:-800,j);
+  original.push(pcm);
+  windows.push(...p.push('s',{...audio('short'+i,i),data:pcm.toString('base64')}).windows);
+ }
+ assert.equal(windows.length,1);
+ assert.deepEqual(windows[0].audioS16,Buffer.concat(original));
+ assert.deepEqual(windows[0].sourceEventIds,['short0','short1','short2','short3']);
 });

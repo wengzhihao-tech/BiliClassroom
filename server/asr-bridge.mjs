@@ -1,4 +1,4 @@
-import {AudioWindows,TranscriptionQueue} from './asr-pipeline.mjs';
+import {ASR_INPUT_GATE,AudioWindows,TranscriptionQueue} from './asr-pipeline.mjs';
 import {randomUUID} from 'node:crypto';
 // Only a caller-supplied local backend is supported. No environment-triggered downloads/cloud calls.
 export class AsrBridge{
@@ -48,6 +48,6 @@ export class AsrBridge{
   }
   status(sessionId){
     if(!this.queue)return{status:'disabled_no_backend'};
-    return{status:this.queue.faulted?(this.queue.faultReason==='errors'?'blocked_backend_errors':'blocked_backend_timeout'):'configured_backend_unverified',failures:{consecutive:this.queue.consecutiveFailures,limit:3},active:!!this.queue.active,pending:!!this.queue.pending,currentSession:!sessionId||this.current?.id===sessionId,queue:{...this.queue.metrics},delivery:{...this.metrics},bufferedSamples:this.planner.samples};
+    return{status:this.queue.faulted?(this.queue.faultReason==='errors'?'blocked_backend_errors':'blocked_backend_timeout'):'configured_backend_unverified',failures:{consecutive:this.queue.consecutiveFailures,limit:3},active:!!this.queue.active,pending:!!this.queue.pending,currentSession:!sessionId||this.current?.id===sessionId,queue:{...this.queue.metrics},delivery:{...this.metrics},bufferedSamples:this.planner.samples,inputGate:{method:ASR_INPUT_GATE,skippedWindows:this.planner.metrics.silenceWindows}};
   }
 }

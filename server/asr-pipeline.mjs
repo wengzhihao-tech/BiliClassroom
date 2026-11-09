@@ -1,6 +1,26 @@
 import {normalizeAsrResult} from './asr-words.mjs';
 import {validateEvent} from './core.mjs';
 // Model-independent scheduling primitives. Energy gating is NOT a trained VAD.
+export const ASR_INPUT_GATE='dc_removed_20ms_energy_not_vad';
+const FRAME_SAMPLES=320; // 20 ms at 16 kHz
+const MIN_ACTIVE_FRAMES=3;
+const MIN_FRAME_VARIANCE=(0.01*32768)**2;
+
+function hasSustainedSignal(parts){
+  let count=0,sum=0,squares=0,activeFrames=0;
+  for(const bytes of parts){
+    for(let i=0;i<bytes.length;i+=2){
+      const sample=bytes.readInt16LE(i);
+      sum+=sample;squares+=sample*sample;count++;
+      if(count===FRAME_SAMPLES){
+        const variance=squares/count-(sum/count)**2;
+        if(variance>=MIN_FRAME_VARIANCE&&++activeFrames===MIN_ACTIVE_FRAMES)return true;
+        count=0;sum=0;squares=0;
+      }
+    }
+  }
+  return false;
+}
 export class AudioWindows {
   constructor(){this.reset();this.metrics={resets:0,silenceWindows:0,duplicates:0,stale:0};}
   reset(){this.segment=(this.segment??-1)+1;this.parts=[];this.samples=0;this.key=null;this.last=null;this.seen=new Set();}
@@ -18,18 +38,18 @@ export class AudioWindows {
     if(discontinuity){reason=this.key!==key?'source_epoch_or_rate_change':'audio_time_gap';this.reset();this.metrics.resets++;}
     this.key=key;this.last={...e,sessionId};this.seen.add(e.id);
     if(this.seen.size>256)this.seen.delete(this.seen.values().next().value);
-    this.parts.push({event:e,pcm:Buffer.from(e.data,'base64'),offset:0});this.samples+=Buffer.from(e.data,'base64').length/2;
+    const pcmChunk=Buffer.from(e.data,'base64');
+    this.parts.push({event:e,pcm:pcmChunk,offset:0});this.samples+=pcmChunk.length/2;
     const windows=[];
     while(this.samples>=64000){
-      let remaining=64000,sum=0;const pcm=[],spans=[];
+      let remaining=64000;const pcm=[],spans=[];
       for(const p of this.parts){
         const take=Math.min(remaining,p.pcm.length/2-p.offset),bytes=p.pcm.subarray(p.offset*2,(p.offset+take)*2);
         pcm.push(bytes);spans.push({id:p.event.id,startSample:p.offset,endSample:p.offset+take,videoTime:p.event.videoTime,playbackRate:p.event.playbackRate});
-        for(let i=0;i<bytes.length;i+=2){const x=bytes.readInt16LE(i)/32768;sum+=x*x;}
         remaining-=take;if(!remaining)break;
       }
-      const first=this.parts[0],start=first.event.videoTime+first.offset/16000*e.playbackRate,rms=Math.sqrt(sum/64000);
-      if(rms>=0.01)windows.push({sessionId,segment:this.segment,epoch:e.epoch,playbackRate:e.playbackRate,videoTime:start,videoEnd:start+4*e.playbackRate,audioDuration:4,sampleRate:16000,sourceEventIds:[...new Set(spans.map(s=>s.id))],spans,audioS16:Buffer.concat(pcm),energyGate:'rms_only_not_vad',timing:'rate_projection_not_browser_verified'});
+      const first=this.parts[0],start=first.event.videoTime+first.offset/16000*e.playbackRate;
+      if(hasSustainedSignal(pcm))windows.push({sessionId,segment:this.segment,epoch:e.epoch,playbackRate:e.playbackRate,videoTime:start,videoEnd:start+4*e.playbackRate,audioDuration:4,sampleRate:16000,sourceEventIds:[...new Set(spans.map(s=>s.id))],spans,audioS16:Buffer.concat(pcm),energyGate:ASR_INPUT_GATE,timing:'rate_projection_not_browser_verified'});
       else this.metrics.silenceWindows++;
       let trim=32000;
       while(trim){const p=this.parts[0],n=Math.min(trim,p.pcm.length/2-p.offset);p.offset+=n;trim-=n;this.samples-=n;if(p.offset===p.pcm.length/2)this.parts.shift();}

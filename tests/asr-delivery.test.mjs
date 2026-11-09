@@ -5,7 +5,7 @@ function fixture(failAt){
  let calls=0,attempts=0,stored=0,time=0;
  const s={id:'synthetic',lastEpoch:0,closed:false};
  const b=new AsrBridge(async()=>{calls++;return 'synthetic text';},()=>{attempts++;if(failAt(attempts))throw Error('synthetic storage failure');stored++;});
- async function window(){const pcm=Buffer.alloc(32000);for(let i=0;i<pcm.length;i+=2)pcm.writeInt16LE(4000,i);
+ async function window(){const pcm=Buffer.alloc(32000);for(let i=0;i<pcm.length;i+=2)pcm.writeInt16LE(i%160<80?4000:-4000,i);
   const n=time===0?4:2;
   for(let i=0;i<n;i++){const t=time++;b.consume(s,[{id:'a'+t,kind:'audio',epoch:0,videoTime:t,captureTime:1,sampleRate:16000,channels:1,duration:1,playbackRate:1,data:pcm.toString('base64')}]);}
   await b.queue.idle();
